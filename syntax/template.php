@@ -31,15 +31,13 @@ class syntax_plugin_wst_template extends DokuWiki_Syntax_Plugin {
     public function getSort() {
         return 320; // should go before Doku_Parser_Mode_media 320
     }
-//    function getAllowedTypes() { return array('formatting', 'substition', 'disabled'); }  
     /**
      * Connect lookup pattern to lexer.
      *
      * @param string $mode Parser mode
      */
     public function connectTo($mode) {
-        $this->Lexer->addSpecialPattern('\{\{[W|w][S|s][T|t]>.*?\}\}', $mode, 'plugin_wst_template');
-//        $this->Lexer->addEntryPattern('\{\{[W|w][S|s][T|t]:(?=.*\}\})', $mode, 'plugin_wst');
+        $this->Lexer->addSpecialPattern('\{\{[W|w][S|s][T|t]>(?:(?:[^\}]*?\{.*?\}\})|.*?)+?\}\}', $mode, 'plugin_wst_template');
     }
 
 /**
@@ -57,10 +55,10 @@ class syntax_plugin_wst_template extends DokuWiki_Syntax_Plugin {
      * @return array Data for the renderer
      */
     public function handle($match, $state, $pos, Doku_Handler $handler){
-//		if (empty($match)) return false;
+		if (empty($match)) return false;
         $template_arguments = array();
-
 		$dump = trim(substr($match, 6, -2));     // remove curly brackets and "wst:" keyword
+		$dump = preg_replace_callback('/\{\{(((?!(\{\{|\}\})).*?|(?R))*)\}\}/', function($match) {return str_replace('|', '{{!}}', $match[0]);}, $dump);
         $dump = explode('|', $dump);             // split template name and arguments
 		$template_name = $dump[0];
 		array_splice($dump, 0, 1); // leave only arguments (if any)
@@ -77,6 +75,7 @@ class syntax_plugin_wst_template extends DokuWiki_Syntax_Plugin {
 				else $template_arguments[$key+1] = $value;
 			}
 		}
+		$template_arguments = str_replace('{{!}}', '|', $template_arguments);
 		$template = $this->get_template($template_name);
 		if (!$template) return;
 		$template_text = $this->replace_args($template, $template_arguments);
@@ -99,7 +98,15 @@ class syntax_plugin_wst_template extends DokuWiki_Syntax_Plugin {
     }
 
 	function get_template($name) {
-		$template = rawWiki($this->getConf('namespace') . ":" . $name); //$conf['namespace'] . "
+		/**
+		 * by default, a page from namespace specified in $conf['namespace'] will be loaded
+		 * To override this, prepend a colon to $name
+		**/
+/**
+		if (substr($name, 0, 1) == ":") $template = rawWiki(substr($name, 1));
+		else $template = rawWiki($this->getConf('namespace') . ":" . $name);
+**/
+		$template = rawWiki((substr($name, 0, 1) == ":") || ($this->getConf('namespace') == '') ? substr($name, 1) : $this->getConf('namespace') . ":" . $name);
 		if (!$template) return false;
 		$template = preg_replace('/<noinclude>.*?<\/noinclude>/s', '', $template);
 		$template = preg_replace('/<includeonly>|<\/includeonly>/', '', $template);
